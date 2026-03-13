@@ -13,8 +13,8 @@ st.title("📅 員工排班登記表")
 FORM_URL = "https://docs.google.com"
 
 ENTRY_NAME = "entry.2117462394"   # 姓名 ID
-ENTRY_DATE = "entry.1676285197"    # 日期 ID
-ENTRY_SHIFT = "entry.193877192"  # 班別 ID
+ENTRY_DATE = "entry.193877192"    # 日期 ID
+ENTRY_SHIFT = "entry.1676285197"  # 班別 ID
 
 def submit_to_google_form(name, records):
     success_count = 0
