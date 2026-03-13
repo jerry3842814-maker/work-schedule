@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
+import time
 
 # --- 基本設定 ---
 st.set_page_config(page_title="員工排班登記系統", layout="centered")
@@ -9,19 +10,18 @@ st.set_page_config(page_title="員工排班登記系統", layout="centered")
 st.title("📅 員工排班登記表")
 
 # --- 1. Google 表單設定 ---
-# 【核心修正】：網址必須包含 /e/ 並以 /formResponse 結尾
 FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdb4wjd8regrwdgHkM_FX2urIAGbO807ZjVYQjh-WYQ7NzXXQ/formResponse"
 
-ENTRY_NAME = "entry.2117462394"   # 姓名 ID
-ENTRY_DATE = "entry.1676285197"    # 日期 ID
-ENTRY_SHIFT = "entry.193877192"  # 班別 ID
+# ⚠️ 請再次核對：日期和班別的 ID 是否相反了？（根據你之前的訊息，這兩個 ID 建議再確認一次）
+ENTRY_NAME = "entry.2117462394"   # 姓名
+ENTRY_DATE = "entry.1676285197"    # 日期
+ENTRY_SHIFT = "entry.193877192"  # 班別
 
 def submit_to_google_form(name, records):
     success_count = 0
-    # 加入 Header 模擬真實瀏覽器，避免被當作機器人阻擋
+    # 模擬瀏覽器 Headers
     headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "Content-Type": "application/x-www-form-urlencoded"
     }
     
     for r in records:
@@ -32,22 +32,26 @@ def submit_to_google_form(name, records):
         }
         try:
             res = requests.post(FORM_URL, data=payload, headers=headers)
-            # Google 表單成功時會回傳 200 或 302
+            # Google 表單只要有回應且沒報 400/405 等錯誤，通常會是 200
             if res.status_code == 200:
+                # 額外檢查：如果回應內容包含 "登入" 或 "必須"，代表權限沒開
+                if "登入" in res.text or "Google 帳戶" in res.text:
+                    st.error(f"❌ 提交失敗：表單要求登入。請在 Google 表單設定中關閉「限制填寫一次」。")
+                    return -1
                 success_count += 1
             else:
-                st.error(f"日期 {r['date']} 提交失敗，代碼：{res.status_code}")
-                if res.status_code == 401 or res.status_code == 403:
-                    st.warning("💡 請檢查表單是否開啟了『限制組織使用者』或『限制填寫一次』。")
+                st.error(f"❌ 日期 {r['date']} 失敗，代碼：{res.status_code}")
         except Exception as e:
-            st.error(f"網路錯誤：{e}")
+            st.error(f"❌ 網路錯誤：{e}")
     return success_count
 
-# --- 2. 初始化 Session State ---
+# --- 2. 初始化 ---
 if "records" not in st.session_state:
     st.session_state.records = []
 if "reset_key" not in st.session_state:
     st.session_state.reset_key = 0
+if "submitted" not in st.session_state:
+    st.session_state.submitted = False
 
 # --- 3. 介面設計 ---
 staff_list = ["請選擇", "廖小婷", "洪慧玲", "謝梁惠芳", "周錫雄", "郭建志", "林瑋晟", "吳孟儒", "洪黃宥森", "劉柏宏", "陳嘉華"]
@@ -56,7 +60,6 @@ name = st.selectbox("👤 1. 選擇姓名", staff_list)
 today = datetime.now().date()
 date_options = [(today + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(60)]
 
-# 透過 key 機制實現連動清除
 selected_dates = st.multiselect(
     "🗓️ 2. 選擇日期", 
     options=date_options, 
@@ -69,6 +72,7 @@ if st.button("➕ 加入預覽清單", use_container_width=True):
     if not selected_dates:
         st.warning("⚠️ 請選擇日期")
     else:
+        st.session_state.submitted = False # 重置提交狀態
         for d in selected_dates:
             st.session_state.records = [r for r in st.session_state.records if r["date"] != d]
             st.session_state.records.append({"date": d, "shift": selected_shift})
@@ -86,8 +90,9 @@ if st.session_state.records:
     
     with col1:
         if st.button("🗑️ 清除預覽與日期", use_container_width=True):
-            st.session_state.records = []  # 清除表格資料
-            st.session_state.reset_key += 1  # 改變 key 以清空上方日期選擇器
+            st.session_state.records = []
+            st.session_state.reset_key += 1
+            st.session_state.submitted = False
             st.rerun() 
             
     with col2:
@@ -95,11 +100,22 @@ if st.session_state.records:
             if name == "請選擇":
                 st.error("❌ 請選擇姓名")
             else:
-                with st.spinner('提交中...'):
+                with st.spinner('正在提交資料...'):
                     count = submit_to_google_form(name, st.session_state.records)
+                    
                     if count == len(st.session_state.records):
-                        st.success(f"✅ 全部 {count} 筆資料已成功提交！")
-                        st.session_state.records = []
-                        st.session_state.reset_key += 1
+                        st.session_state.submitted = True
                         st.balloons()
-                        st.rerun()
+                    elif count == -1:
+                        pass # 權限錯誤已在函數內報錯
+                    elif count > 0:
+                        st.warning(f"⚠️ 僅成功提交 {count} 筆。")
+
+# --- 5. 提交成功後的顯示 (放在主層級確保不消失) ---
+if st.session_state.submitted:
+    st.success(f"✅ 成功提交！資料已同步至雲端。")
+    if st.button("✨ 點我清空內容", use_container_width=True):
+        st.session_state.records = []
+        st.session_state.reset_key += 1
+        st.session_state.submitted = False
+        st.rerun()
