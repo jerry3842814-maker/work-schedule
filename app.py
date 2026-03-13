@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 # --- 基本設定 ---
 st.set_page_config(page_title="員工排班登記系統", layout="centered")
 
-st.title("📅 員工排班登記表 (Google 表單版)")
+st.title("📅 員工排班登記表 ")
 
 # --- 1. Google 表單設定 (請再次確認這三個 ID) ---
 # 注意：這裡使用 /formResponse 結尾
