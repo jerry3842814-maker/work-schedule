@@ -17,9 +17,9 @@ st.title("📅 員工排班登記表 (Google 表單連線版)")
 # --- 1. Google 表單設定 (請務必修改此處) ---
 # 將下方 ID 換成你從「預先填妥連結」中取得的數字
 FORM_ID = "1FAIpQLSe..." # 這是表單網址中的 ID，也可以從 viewform 網址中取得
-ENTRY_NAME = "entry.12345678"  # 姓名的欄位 ID
-ENTRY_DATE = "entry.87654321"  # 日期的欄位 ID
-ENTRY_SHIFT = "entry.11223344" # 班別的欄位 ID
+ENTRY_NAME = "entry.2117462394"  # 姓名的欄位 ID
+ENTRY_DATE = "entry.193877192"  # 日期的欄位 ID
+ENTRY_SHIFT = "entry.1676285197" # 班別的欄位 ID
 
 # 表單提交網址 (注意結尾是 formResponse)
 FORM_URL = f"https://docs.google.com"
