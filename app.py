@@ -22,7 +22,7 @@ ENTRY_DATE = "entry.193877192"  # 日期的欄位 ID
 ENTRY_SHIFT = "entry.1676285197" # 班別的欄位 ID
 
 # 表單提交網址 (注意結尾是 formResponse)
-FORM_URL = f"https://docs.google.com"
+ base_url = "https://docs.google.com/forms/d/19WRLS2MpUbbexT851UOexI9OXq9Foge0JFj8Dg-SjFg/prefill/formResponse"
 
 def submit_to_google_form(name, records):
     success_count = 0
