@@ -6,15 +6,15 @@ from datetime import datetime, timedelta
 # --- 基本設定 ---
 st.set_page_config(page_title="員工排班登記系統", layout="centered")
 
-st.title("📅 員工排班登記表 ")
+st.title("📅 員工排班登記表")
 
-# --- 1. Google 表單設定 (請再次確認這三個 ID) ---
-# 注意：這裡使用 /formResponse 結尾
-FORM_URL = "https://docs.google.com/forms/d/19WRLS2MpUbbexT851UOexI9OXq9Foge0JFj8Dg-SjFg/edit#responses"
+# --- 1. Google 表單設定 ---
+# 【重要修正】：網址必須是 /e/.../formResponse 格式
+FORM_URL = "https://docs.google.com"
 
 ENTRY_NAME = "entry.2117462394"   # 姓名 ID
-ENTRY_DATE = "entry.193877192"    # 日期 ID
-ENTRY_SHIFT = "entry.1676285197"  # 班別 ID
+ENTRY_DATE = "entry.1676285197"    # 日期 ID
+ENTRY_SHIFT = "entry.193877192"  # 班別 ID
 
 def submit_to_google_form(name, records):
     success_count = 0
@@ -25,11 +25,8 @@ def submit_to_google_form(name, records):
             ENTRY_SHIFT: r["shift"]
         }
         try:
-            # 這裡加入 headers 模擬真實瀏覽器提交
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
             res = requests.post(FORM_URL, data=payload, headers=headers)
-            
-            # Google 表單成功送出會回傳 200
             if res.status_code == 200:
                 success_count += 1
             else:
@@ -64,18 +61,28 @@ st.write("---")
 
 # --- 4. 顯示與提交 ---
 if st.session_state.records:
+    st.subheader("📍 目前登記預覽")
     df_preview = pd.DataFrame(st.session_state.records).sort_values("date")
     st.dataframe(df_preview, use_container_width=True, hide_index=True)
     
-    if st.button("🚀 確認提交到 Google 表單", type="primary", use_container_width=True):
-        if name == "請選擇":
-            st.error("❌ 請選擇姓名")
-        else:
-            with st.spinner('提交中...'):
-                count = submit_to_google_form(name, st.session_state.records)
-                if count == len(st.session_state.records):
-                    st.success(f"✅ 全部 {count} 筆資料已成功提交！")
-                    st.session_state.records = []
-                    st.balloons()
-                elif count > 0:
-                    st.warning(f"⚠️ 僅成功提交 {count} 筆，請檢查失敗的項目。")
+    # 建立兩顆按鈕：清除與提交
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🗑️ 清除預覽清單", use_container_width=True):
+            st.session_state.records = []
+            st.rerun() # 立即重新整理畫面
+            
+    with col2:
+        if st.button("🚀 確認提交到雲端", type="primary", use_container_width=True):
+            if name == "請選擇":
+                st.error("❌ 請選擇姓名")
+            else:
+                with st.spinner('提交中...'):
+                    count = submit_to_google_form(name, st.session_state.records)
+                    if count == len(st.session_state.records):
+                        st.success(f"✅ 全部 {count} 筆資料已成功提交！")
+                        st.session_state.records = []
+                        st.balloons()
+                    elif count > 0:
+                        st.warning(f"⚠️ 僅成功提交 {count} 筆，請檢查失敗項目。")
