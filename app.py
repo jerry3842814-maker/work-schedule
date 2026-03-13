@@ -10,7 +10,7 @@ st.title("📅 員工排班登記表")
 
 # --- 1. Google 表單設定 ---
 # 【核心修正】：網址必須包含 /e/ 並以 /formResponse 結尾
-FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdb4wjd8regrwdgHkM_FX2urIAGbO807ZjVYQjh-WYQ7NzXXQ/"
+FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdb4wjd8regrwdgHkM_FX2urIAGbO807ZjVYQjh-WYQ7NzXXQ/formResponse"
 
 ENTRY_NAME = "entry.2117462394"   # 姓名 ID
 ENTRY_DATE = "entry.1676285197"    # 日期 ID
