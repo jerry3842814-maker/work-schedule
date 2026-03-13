@@ -6,92 +6,76 @@ from datetime import datetime, timedelta
 # --- 基本設定 ---
 st.set_page_config(page_title="員工排班登記系統", layout="centered")
 
-st.markdown("""
-    <style>
-    div.stButton > button { width: 100%; height: 3.5em; font-size: 18px; font-weight: bold; border-radius: 10px; }
-    </style>
-    """, unsafe_allow_html=True)
-
 st.title("📅 員工排班登記表 (Google 表單版)")
 
-# --- 1. Google 表單設定 ---
-# 這是你的表單專屬提交網址
+# --- 1. Google 表單設定 (請再次確認這三個 ID) ---
+# 注意：這裡使用 /formResponse 結尾
 FORM_URL = "https://docs.google.com/forms/d/19WRLS2MpUbbexT851UOexI9OXq9Foge0JFj8Dg-SjFg/edit#responses"
 
-# 你提供的 Entry ID
-ENTRY_NAME = "entry.2117462394"   # 姓名
-ENTRY_DATE = "entry.193877192"    # 日期
-ENTRY_SHIFT = "entry.1676285197"  # 班別
+ENTRY_NAME = "entry.2117462394"   # 姓名 ID
+ENTRY_DATE = "entry.193877192"    # 日期 ID
+ENTRY_SHIFT = "entry.1676285197"  # 班別 ID
 
 def submit_to_google_form(name, records):
     success_count = 0
     for r in records:
-        # 建立提交數據
         payload = {
             ENTRY_NAME: name,
             ENTRY_DATE: r["date"],
             ENTRY_SHIFT: r["shift"]
         }
         try:
-            # 模擬瀏覽器送出 POST 請求
-            res = requests.post(FORM_URL, data=payload)
+            # 這裡加入 headers 模擬真實瀏覽器提交
+            headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+            res = requests.post(FORM_URL, data=payload, headers=headers)
+            
+            # Google 表單成功送出會回傳 200
             if res.status_code == 200:
                 success_count += 1
+            else:
+                st.error(f"日期 {r['date']} 提交失敗，代碼：{res.status_code}")
         except Exception as e:
-            st.error(f"提交 {r['date']} 時發生錯誤: {e}")
+            st.error(f"網路錯誤：{e}")
     return success_count
 
-# --- 2. 初始化 Session State ---
+# --- 2. 初始化 ---
 if "records" not in st.session_state:
     st.session_state.records = []
 
 # --- 3. 介面設計 ---
 staff_list = ["請選擇", "廖小婷", "洪慧玲", "謝梁惠芳", "周錫雄", "郭建志", "林瑋晟", "吳孟儒", "洪黃宥森", "劉柏宏", "陳嘉華"]
-name = st.selectbox("👤 1. 選擇您的姓名 *", staff_list)
-
-st.write("---")
+name = st.selectbox("👤 1. 選擇姓名", staff_list)
 
 today = datetime.now().date()
 date_options = [(today + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(60)]
-selected_dates = st.multiselect("🗓️ 2. 選擇日期 (可多選) *", options=date_options)
-selected_shift = st.radio("⏰ 3. 選擇以上日期的班別", ["早", "晚", "休"], horizontal=True)
+selected_dates = st.multiselect("🗓️ 2. 選擇日期", options=date_options)
+selected_shift = st.radio("⏰ 3. 選擇班別", ["早", "晚", "休"], horizontal=True)
 
-if st.button("➕ 加入預覽清單"):
+if st.button("➕ 加入預覽清單", use_container_width=True):
     if not selected_dates:
-        st.warning("⚠️ 請先選擇日期")
+        st.warning("⚠️ 請選擇日期")
     else:
         for d in selected_dates:
-            # 確保同日期不重複加入
             st.session_state.records = [r for r in st.session_state.records if r["date"] != d]
             st.session_state.records.append({"date": d, "shift": selected_shift})
-        st.success(f"已加入 {len(selected_dates)} 筆資料至預覽")
+        st.success("已加入預覽")
 
 st.write("---")
 
 # --- 4. 顯示與提交 ---
 if st.session_state.records:
-    st.subheader("📍 目前登記預覽")
     df_preview = pd.DataFrame(st.session_state.records).sort_values("date")
-    # 使用 dataframe 顯示較美觀
     st.dataframe(df_preview, use_container_width=True, hide_index=True)
     
-    if st.button("🗑️ 清空重選"):
-        st.session_state.records = []
-        st.rerun()
-    
-    st.write("---")
-    
-    if st.button("🚀 確認提交到雲端 (Google 表單)", type="primary"):
+    if st.button("🚀 確認提交到 Google 表單", type="primary", use_container_width=True):
         if name == "請選擇":
-            st.error("❌ 請先選擇姓名！")
+            st.error("❌ 請選擇姓名")
         else:
-            with st.spinner('正在上傳資料至 Google 表單...'):
+            with st.spinner('提交中...'):
                 count = submit_to_google_form(name, st.session_state.records)
-                if count > 0:
-                    st.success(f"✅ 成功提交 {count} 筆資料！請查看您的試算表。")
-                    st.session_state.records = [] # 提交後清空
+                if count == len(st.session_state.records):
+                    st.success(f"✅ 全部 {count} 筆資料已成功提交！")
+                    st.session_state.records = []
                     st.balloons()
-                else:
-                    st.error("❌ 提交失敗，請檢查網路連線或表單網址。")
-else:
-    st.info("💡 請先選擇日期並點擊「加入預覽清單」。")
+                elif count > 0:
+                    st.warning(f"⚠️ 僅成功提交 {count} 筆，請檢查失敗的項目。")
