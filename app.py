@@ -16,7 +16,7 @@ st.title("📅 員工排班登記表 (Google 表單版)")
 
 # --- 1. Google 表單設定 ---
 # 這是你的表單專屬提交網址
-FORM_URL = "https://docs.google.com"
+FORM_URL = "https://docs.google.com/forms/d/19WRLS2MpUbbexT851UOexI9OXq9Foge0JFj8Dg-SjFg/edit#responses"
 
 # 你提供的 Entry ID
 ENTRY_NAME = "entry.2117462394"   # 姓名
