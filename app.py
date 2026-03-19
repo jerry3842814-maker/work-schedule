@@ -62,15 +62,13 @@ name = st.selectbox(
     key=f"name_select_{st.session_state.global_reset_key}"
 )
 
-# 第 2 步：選擇班別
+# 第 2 步：選擇班別 (加入 on_change 事件)
 selected_shift = st.radio(
     "⏰ 2. 選擇班別", 
     ["早", "晚", "休"], 
     horizontal=True, 
-    on_change=reset_dates,
-    key=f"shift_radio_{st.session_state.reset_key}"
+    on_change=reset_dates  # 當班別切換時，自動執行清空日期
 )
-
 # 第 3 步：選擇日期
 today = datetime.now().date()
 date_options = [(today + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(60)]
