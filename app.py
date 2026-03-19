@@ -19,7 +19,7 @@ ENTRY_SHIFT = "entry.193877192"   # 班別
 
 # ⚠️ 請在此替換為你「發佈到網路」產生的 CSV 連結 ⚠️
 # 範例格式：https://docs.google.com
-SHEET_CSV_URL = "https://docs.google.com"
+SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT-utk_RXaKqx5Iy6xf3xhN-q9wTdvvLy8iHr2yrUr-VIXyaQVjEZu2_SGXSkh0-EZY5_Zgu298AEEO/pubhtml"
 
 # --- 2. 函式定義 ---
 
@@ -156,7 +156,7 @@ if st.button("🔄 刷新雲端資料", use_container_width=True):
     st.cache_data.clear()
 
 # 抓取雲端 CSV 資料
-all_data = get_cloud_data(https://docs.google.com/spreadsheets/d/e/2PACX-1vT-utk_RXaKqx5Iy6xf3xhN-q9wTdvvLy8iHr2yrUr-VIXyaQVjEZu2_SGXSkh0-EZY5_Zgu298AEEO/pubhtml)
+all_data = get_cloud_data(SHEET_CSV_URL)
 
 if all_data is not None and not all_data.empty:
     # 嘗試依日期排序（需與你的試算表標題一致）
