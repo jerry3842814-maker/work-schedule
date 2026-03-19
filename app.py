@@ -37,7 +37,6 @@ def submit_to_google_form(name, records):
                     return -1
                 success_count += 1
             else:
-                # 這裡如果出現 401，請檢查 Google 表單權限是否設為「公開」
                 st.error(f"❌ 日期 {r['date']} 失敗，代碼：{res.status_code}")
         except Exception as e:
             st.error(f"❌ 網路錯誤：{e}")
@@ -50,15 +49,17 @@ if "reset_key" not in st.session_state:
     st.session_state.reset_key = 0
 if "submitted" not in st.session_state:
     st.session_state.submitted = False
+if "global_reset_key" not in st.session_state:
+    st.session_state.global_reset_key = 0
 
 # --- 3. 介面設計 ---
 
-# 為姓名選單加上 key，讓它能隨 reset_key 重置
+# 姓名選單使用 global_reset_key，只有「全部清空」時才會重置
 staff_list = ["請選擇", "廖小婷", "洪慧玲", "謝梁惠芳", "周錫雄", "郭建志", "林瑋晟", "吳孟儒", "洪黃宥森", "劉柏宏", "陳嘉華"]
 name = st.selectbox(
     "👤 1. 選擇姓名", 
     staff_list, 
-    key=f"name_select_{st.session_state.reset_key}"
+    key=f"name_select_{st.session_state.global_reset_key}"
 )
 
 # 第 2 步：選擇班別
@@ -74,7 +75,7 @@ selected_shift = st.radio(
 today = datetime.now().date()
 date_options = [(today + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(60)]
 
-# 這裡也加上 key 確保連動重置
+# 日期選單使用 reset_key，不論是切換班別或局部清除都會重置
 selected_dates = st.multiselect(
     "🗓️ 3. 選擇日期 (選好班別再選日期)", 
     options=date_options, 
@@ -104,9 +105,10 @@ if st.session_state.records:
     col1, col2 = st.columns(2)
     
     with col1:
+        # 修改此按鈕邏輯：只增加局部 reset_key，不增加 global_reset_key
         if st.button("🗑️ 清除預覽與日期", use_container_width=True):
             st.session_state.records = []
-            st.session_state.reset_key += 1
+            st.session_state.reset_key += 1 # 只重置日期和班別
             st.session_state.submitted = False
             st.rerun() 
             
@@ -126,8 +128,9 @@ if st.session_state.records:
 if st.session_state.submitted:
     st.success(f"✅ 成功提交！資料已同步至雲端。")
     if st.button("✨ 點我清空內容", use_container_width=True):
-        # 核心重置邏輯：清空紀錄並更新 reset_key
+        # 這裡會增加 global_reset_key，所以連姓名都會被清空
         st.session_state.records = []
         st.session_state.reset_key += 1
+        st.session_state.global_reset_key += 1
         st.session_state.submitted = False
         st.rerun()
