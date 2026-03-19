@@ -132,3 +132,30 @@ if st.session_state.submitted:
         st.session_state.global_reset_key += 1
         st.session_state.submitted = False
         st.rerun()
+
+
+# --- 5. 底部總表顯示 (放在程式碼最後) ---
+st.write("---")
+st.subheader("📋 本次登記清單總覽")
+
+if st.session_state.records:
+    # 將記錄轉換為 DataFrame
+    final_df = pd.DataFrame(st.session_state.records)
+    
+    # 整理格式：依日期排序
+    final_df = final_df.sort_values(by="date")
+    
+    # 改進欄位名稱顯示
+    final_df.columns = ["日期", "班別"]
+    
+    # 顯示表格 (使用 use_container_width 滿版顯示)
+    st.dataframe(
+        final_df, 
+        use_container_width=True, 
+        hide_index=True  # 隱藏左側索引數字，看起來更乾淨
+    )
+    
+    # 也可以顯示統計資訊
+    st.caption(f"目前共選取了 {len(final_df)} 個班次")
+else:
+    st.info("目前尚無登記記錄，請由上方選單加入。")
