@@ -139,7 +139,7 @@ st.write("---")
 st.subheader("📊 雲端即時排班總表")
 
 # 這裡換成你從 Google 試算表「發佈到網路」取得的 CSV 連結
-SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1_CZ68lKFKuNs-yK2BEGSZUlFNjbSSJJt1BpTG4QfYog/edit?resourcekey=&gid=1672423289#gid=1672423289"
+SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1_CZ68lKFKuNs-yK2BEGSZUlFNjbSSJJt1BpTG4QfYog/edit?usp=sharing"
 
 def get_cloud_data():
     try:
