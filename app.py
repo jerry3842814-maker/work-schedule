@@ -134,28 +134,40 @@ if st.session_state.submitted:
         st.rerun()
 
 
-# --- 5. 底部總表顯示 (放在程式碼最後) ---
+# --- 5. 顯示雲端所有人的登記紀錄 ---
 st.write("---")
-st.subheader("📋 本次登記清單總覽")
+st.subheader("📊 雲端即時排班總表")
 
-if st.session_state.records:
-    # 將記錄轉換為 DataFrame
-    final_df = pd.DataFrame(st.session_state.records)
+# 這裡換成你從 Google 試算表「發佈到網路」取得的 CSV 連結
+SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1_CZ68lKFKuNs-yK2BEGSZUlFNjbSSJJt1BpTG4QfYog/edit?resourcekey=&gid=1672423289#gid=1672423289"
+
+def get_cloud_data():
+    try:
+        # 讀取雲端 CSV
+        df = pd.read_csv(SHEET_CSV_URL)
+        # 根據你的表單欄位名稱做排序（請確認名稱是否正確，例如 '時間戳記' 或 '日期'）
+        if "日期" in df.columns:
+            df = df.sort_values(by="日期", ascending=True)
+        return df
+    except Exception as e:
+        return None
+
+# 按鈕：手動重新整理
+if st.button("🔄 刷新雲端資料"):
+    st.cache_data.clear()
+
+# 抓取資料並顯示
+all_data = get_cloud_data()
+
+if all_data is not None and not all_data.empty:
+    # 這裡可以根據需求過濾掉太舊的日期
+    # 例如只顯示今天以後的：all_data = all_data[all_data['日期'] >= str(today)]
     
-    # 整理格式：依日期排序
-    final_df = final_df.sort_values(by="date")
-    
-    # 改進欄位名稱顯示
-    final_df.columns = ["日期", "班別"]
-    
-    # 顯示表格 (使用 use_container_width 滿版顯示)
     st.dataframe(
-        final_df, 
+        all_data, 
         use_container_width=True, 
-        hide_index=True  # 隱藏左側索引數字，看起來更乾淨
+        hide_index=True
     )
-    
-    # 也可以顯示統計資訊
-    st.caption(f"目前共選取了 {len(final_df)} 個班次")
+    st.caption(f"最後更新時間：{datetime.now().strftime('%H:%M:%S')}")
 else:
-    st.info("目前尚無登記記錄，請由上方選單加入。")
+    st.info("目前雲端尚無資料，或尚未發佈到網路。")
