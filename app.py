@@ -65,7 +65,7 @@ name = st.selectbox(
 # 第 2 步：選擇班別 (加入 on_change 事件)
 selected_shift = st.radio(
     "⏰ 2. 選擇班別", 
-    ["早", "晚", "休","不接組"], 
+    ["早", "晚", "休", "不接組"], 
     horizontal=True, 
     on_change=reset_dates  # 當班別切換時，自動執行清空日期
 )
@@ -136,7 +136,7 @@ if st.session_state.submitted:
 
 # --- 5. 顯示雲端所有人的登記紀錄 ---
 st.write("---")
-st.subheader("📊 雲端即時排班總表")
+st.subheader("📊 雲端預班總表")
 
 # 這裡換成你從 Google 試算表「發佈到網路」取得的 CSV 連結
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT-utk_RXaKqx5Iy6xf3xhN-q9wTdvvLy8iHr2yrUr-VIXyaQVjEZu2_SGXSkh0-EZY5_Zgu298AEEO/pub?gid=1144015050&single=true&output=csv"
@@ -168,7 +168,10 @@ if all_data is not None and not all_data.empty:
         use_container_width=True, 
         hide_index=True
     )
-    st.caption(f"最後更新時間：{datetime.now().strftime('%H:%M:%S')}")
+     # datetime.utcnow() 取得標準時，加上 8 小時即為台灣時間
+    tw_time = datetime.utcnow() + timedelta(hours=8)
+    st.caption(f"最後更新時間 (UTC+8)：{tw_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    # ------------------------------
+
 else:
     st.info("目前雲端尚無資料，或尚未發佈到網路。")
-
