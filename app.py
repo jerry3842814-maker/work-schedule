@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 # --- 基本設定 ---
 st.set_page_config(page_title="員工排班登記系統", layout="centered")
 
-st.title("📅 員工排班登記表")
+st.title("📅 員工預班登記表")
 
 # --- 1. Google 表單設定 ---
 FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdb4wjd8regrwdgHkM_FX2urIAGbO807ZjVYQjh-WYQ7NzXXQ/formResponse"
