@@ -65,7 +65,7 @@ name = st.selectbox(
 # 第 2 步：選擇班別 (加入 on_change 事件)
 selected_shift = st.radio(
     "⏰ 2. 選擇班別", 
-    ["早", "晚", "休"], 
+    ["早", "晚", "休","不接組"], 
     horizontal=True, 
     on_change=reset_dates  # 當班別切換時，自動執行清空日期
 )
