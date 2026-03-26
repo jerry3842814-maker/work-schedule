@@ -94,57 +94,30 @@ def analyze_rest_data(cloud_df):
     從雲端資料中分析休班狀況
     回傳:
     - date_to_names: {日期: set(姓名)}
-    - debug_info: 除錯資訊
     """
-    debug_info = {
-        "所有欄位": [],
-        "日期欄位": None,
-        "班別欄位": None,
-        "姓名欄位": None,
-        "雲端總筆數": 0,
-        "休班總筆數": 0,
-        "休班日期範例": [],
-        "錯誤原因": None
-    }
-
     if cloud_df is None or cloud_df.empty:
-        debug_info["錯誤原因"] = "雲端資料為空"
-        return {}, debug_info
+        return {}
 
     df = cloud_df.copy()
     df = clean_columns(df)
-    debug_info["所有欄位"] = list(df.columns)
-    debug_info["雲端總筆數"] = len(df)
 
-    # 依照你目前試算表截圖的真實欄位名稱
     date_col = "請選擇日期" if "請選擇日期" in df.columns else None
     shift_col = "請選擇班別或休假" if "請選擇班別或休假" in df.columns else None
     name_col = "姓名" if "姓名" in df.columns else None
 
-    debug_info["日期欄位"] = date_col
-    debug_info["班別欄位"] = shift_col
-    debug_info["姓名欄位"] = name_col
-
     if not date_col or not shift_col or not name_col:
-        debug_info["錯誤原因"] = "找不到『請選擇日期 / 請選擇班別或休假 / 姓名』欄位"
-        return {}, debug_info
+        return {}
 
-    # 全部轉字串並清理
     df[date_col] = df[date_col].apply(normalize_text)
     df[shift_col] = df[shift_col].apply(normalize_text)
     df[name_col] = df[name_col].apply(normalize_text)
 
-    # 只抓「休」
     rest_df = df[df[shift_col] == "休"].copy()
-    debug_info["休班總筆數"] = len(rest_df)
-
     if rest_df.empty:
-        return {}, debug_info
+        return {}
 
     rest_df["normalized_date"] = rest_df[date_col].apply(normalize_date)
     rest_df = rest_df[rest_df["normalized_date"].notna()].copy()
-
-    debug_info["休班日期範例"] = list(rest_df["normalized_date"].unique()[:8])
 
     date_to_names = (
         rest_df.groupby("normalized_date")[name_col]
@@ -152,7 +125,14 @@ def analyze_rest_data(cloud_df):
         .to_dict()
     )
 
-    return date_to_names, debug_info
+    return date_to_names
+
+
+def get_full_rest_dates(cloud_df):
+    """取得目前『休』已滿或超過上限的日期"""
+    date_to_names = analyze_rest_data(cloud_df)
+    full_dates = sorted([d for d, names in date_to_names.items() if len(names) >= REST_LIMIT])
+    return full_dates
 
 
 def check_rest_violations(cloud_df, selected_name, records_to_check):
@@ -162,11 +142,7 @@ def check_rest_violations(cloud_df, selected_name, records_to_check):
     - 同一天雲端已有 3 人休，再加自己就不行
     - 如果雲端已經有自己的休假資料，不重複加算
     """
-    date_to_names, debug_info = analyze_rest_data(cloud_df)
-
-    if debug_info["錯誤原因"]:
-        return [], debug_info
-
+    date_to_names = analyze_rest_data(cloud_df)
     violating_dates = []
 
     for r in records_to_check:
@@ -183,7 +159,7 @@ def check_rest_violations(cloud_df, selected_name, records_to_check):
             violating_dates.append(d)
 
     violating_dates = sorted(list(set(violating_dates)))
-    return violating_dates, debug_info
+    return violating_dates
 
 
 def submit_to_google_form(name, records):
@@ -248,9 +224,22 @@ selected_shift = st.radio(
 today = datetime.now().date()
 date_options = [(today + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(60)]
 
+# 先抓休班已滿日期
+cloud_rest_df = get_rest_data()
+full_rest_dates = get_full_rest_dates(cloud_rest_df) if cloud_rest_df is not None else []
+
+# 當選「休」時，直接顯示提示
+if selected_shift == "休":
+    if full_rest_dates:
+        st.warning("⚠️ 以下日期「休」已滿 3 人：" + "、".join(full_rest_dates))
+        st.caption("日期選單中標示「（休已滿）」的日期不可再登記休假。")
+    else:
+        st.info("✅ 目前沒有日期的「休」達到 3 人上限。")
+
 selected_dates = st.multiselect(
     "🗓️ 3. 選擇日期 (選好班別再選日期)",
     options=date_options,
+    format_func=lambda d: f"{d}（休已滿）" if selected_shift == "休" and d in full_rest_dates else d,
     key=f"date_selector_{st.session_state.reset_key}"
 )
 
@@ -275,7 +264,7 @@ if st.button("➕ 加入預覽清單", use_container_width=True, type="primary")
             if cloud_df is None:
                 st.error("❌ 目前無法讀取休班檢查資料，暫時不能登記『休』。")
             else:
-                violating_dates, debug_info = check_rest_violations(cloud_df, name, simulated_records)
+                violating_dates = check_rest_violations(cloud_df, name, simulated_records)
 
                 if violating_dates:
                     st.error(
@@ -286,17 +275,6 @@ if st.button("➕ 加入預覽清單", use_container_width=True, type="primary")
                     st.session_state.records = simulated_records
                     st.session_state.submitted = False
                     st.success(f"✅ 已加入預覽：{len(selected_dates)} 筆（休）")
-
-                with st.expander("🔍 休班檢查除錯資訊", expanded=False):
-                    st.write("**所有欄位：**", debug_info["所有欄位"])
-                    st.write("**日期欄位：**", debug_info["日期欄位"])
-                    st.write("**班別欄位：**", debug_info["班別欄位"])
-                    st.write("**姓名欄位：**", debug_info["姓名欄位"])
-                    st.write("**雲端總筆數：**", debug_info["雲端總筆數"])
-                    st.write("**休班總筆數：**", debug_info["休班總筆數"])
-                    st.write("**休班日期範例：**", debug_info["休班日期範例"])
-                    if debug_info["錯誤原因"]:
-                        st.error(debug_info["錯誤原因"])
         else:
             st.session_state.records = simulated_records
             st.session_state.submitted = False
@@ -335,7 +313,7 @@ if st.session_state.records:
                     if cloud_df is None:
                         st.error("❌ 目前無法讀取休班檢查資料，暫時不能提交。")
                     else:
-                        violating_dates, debug_info = check_rest_violations(
+                        violating_dates = check_rest_violations(
                             cloud_df,
                             name,
                             st.session_state.records
