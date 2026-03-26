@@ -13,20 +13,36 @@ ENTRY_NAME = "entry.2117462394"   # 姓名
 ENTRY_DATE = "entry.1676285197"   # 日期
 ENTRY_SHIFT = "entry.193877192"   # 班別
 
-# --- 雲端資料設定 ---
-SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT-utk_RXaKqx5Iy6xf3xhN-q9wTdvvLy8iHr2yrUr-VIXyaQVjEZu2_SGXSkh0-EZY5_Zgu298AEEO/pub?gid=1144015050&single=true&output=csv"
+# === 新增：兩個不同的 CSV 網址 ===
+# 休班檢查專用（新網址，用來即時計算是否超過3人）
+REST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT-utk_RXaKqx5Iy6xf3xhN-q9wTdvvLy8iHr2yrUr-VIXyaQVjEZu2_SGXSkh0-EZY5_Zgu298AEEO/pub?gid=1672423289&single=true&output=csv"
+
+# 最底下顯示總表的網址（原網址）
+TOTAL_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT-utk_RXaKqx5Iy6xf3xhN-q9wTdvvLy8iHr2yrUr-VIXyaQVjEZu2_SGXSkh0-EZY5_Zgu298AEEO/pub?gid=1144015050&single=true&output=csv"
 
 @st.cache_data(ttl=30)
-def get_cloud_data():
+def get_rest_data():
+    """專門用來檢查「休」班是否超過3人的資料"""
     try:
-        df = pd.read_csv(SHEET_CSV_URL)
+        df = pd.read_csv(REST_CSV_URL)
         df = df.astype(str).apply(lambda x: x.str.strip())
         return df
     except Exception as e:
-        st.error(f"❌ 無法讀取雲端資料: {e}")
+        st.error(f"❌ 無法讀取休班檢查資料: {e}")
         return None
 
-# === 最終客製版「休」班檢查（已針對你的「年度」+「2026」+ Unnamed 結構 + 日期格式不一致問題完全解決）===
+@st.cache_data(ttl=30)
+def get_total_data():
+    """最底下顯示的完整登記總表"""
+    try:
+        df = pd.read_csv(TOTAL_CSV_URL)
+        df = df.astype(str).apply(lambda x: x.str.strip())
+        return df
+    except Exception as e:
+        st.error(f"❌ 無法讀取總表資料: {e}")
+        return None
+
+# === 最終客製版「休」班檢查（使用新休班專用網址）===
 def check_rest_violations(cloud_df, selected_name, selected_shift, selected_dates):
     if selected_shift != "休" or cloud_df is None or cloud_df.empty:
         return [], None
@@ -35,28 +51,12 @@ def check_rest_violations(cloud_df, selected_name, selected_shift, selected_date
 
     # 1. 日期欄位（已確認是「年度」）
     date_col = "年度" if "年度" in df_cols else None
-    if date_col is None:
-        for col in df_cols:
-            if cloud_df[col].astype(str).str.match(r'^\d{4}-\d{2}-\d{2}').sum() >= 3:
-                date_col = col
-                break
 
     # 2. 班別欄位（已確認是「2026」）
     shift_col = "2026" if "2026" in df_cols else None
-    if shift_col is None:
-        shift_keywords = {"早", "晚", "休", "不接組"}
-        for col in df_cols:
-            if cloud_df[col].isin(shift_keywords).sum() >= 3:
-                shift_col = col
-                break
 
     # 3. 姓名欄位（已確認是 Unnamed: 2）
     name_col = "Unnamed: 2" if "Unnamed: 2" in df_cols else None
-    if name_col is None:
-        for col in df_cols:
-            if "Unnamed: 2" in str(col) or "姓名" in str(col):
-                name_col = col
-                break
 
     # ====================== 除錯資訊 ======================
     debug_info = {
@@ -80,17 +80,14 @@ def check_rest_violations(cloud_df, selected_name, selected_shift, selected_date
     if rest_df.empty:
         return [], debug_info
 
-    # ====================== 關鍵修正：日期正規化（解決格式不一致問題） ======================
+    # ====================== 日期正規化 ======================
     rest_df = rest_df.copy()
     try:
-        # 把「年度」欄位的日期轉成標準 YYYY-MM-DD 格式
         rest_df['normalized_date'] = pd.to_datetime(
             rest_df[date_col], errors='coerce'
         ).dt.strftime('%Y-%m-%d')
-        # 移除無法解析的行
         rest_df = rest_df[rest_df['normalized_date'].notna()]
     except:
-        # fallback
         rest_df['normalized_date'] = rest_df[date_col].astype(str).str.strip()
 
     debug_info["休班日期範例"] = list(rest_df['normalized_date'].unique()[:8])
@@ -106,9 +103,9 @@ def check_rest_violations(cloud_df, selected_name, selected_shift, selected_date
         date_to_count = rest_df.groupby('normalized_date').size().to_dict()
         date_to_names = {}
 
-    # ====================== 檢查本次登記是否超過3人 ======================
+    # ====================== 檢查是否超過3人 ======================
     violating_dates = []
-    for d in selected_dates:   # selected_dates 已經是 YYYY-MM-DD
+    for d in selected_dates:
         current_count = date_to_count.get(d, 0)
         already = False
         if name_col and d in date_to_names:
@@ -185,7 +182,8 @@ if st.button("➕ 加入預覽清單", use_container_width=True, type="primary")
     elif not selected_dates:
         st.warning("⚠️ 請選擇日期")
     else:
-        cloud_df = get_cloud_data()
+        # 使用新休班專用網址進行檢查
+        cloud_df = get_rest_data()
         
         violating_dates, debug_info = check_rest_violations(cloud_df, name, selected_shift, selected_dates)
         
@@ -200,7 +198,7 @@ if st.button("➕ 加入預覽清單", use_container_width=True, type="primary")
         elif selected_shift == "休":
             st.success("✅ 本次登記「休」未超過3人上限")
         
-        # 加入預覽（即使有警示仍可繼續登記）
+        # 加入預覽
         st.session_state.submitted = False
         for d in selected_dates:
             st.session_state.records = [r for r in st.session_state.records if r["date"] != d]
@@ -256,14 +254,14 @@ if st.session_state.submitted:
         st.session_state.submitted = False
         st.rerun()
 
-# --- 5. 雲端總表 ---
+# --- 5. 雲端總表（使用原本的總表網址）---
 st.write("---")
 st.subheader("📊 雲端預班總表")
 
 if st.button("🔄 查看/重新整理登記表", use_container_width=True):
     st.cache_data.clear()
 
-all_data = get_cloud_data()
+all_data = get_total_data()
 if all_data is not None and not all_data.empty:
     st.dataframe(all_data, use_container_width=True, hide_index=True)
     tw_time = datetime.utcnow() + timedelta(hours=8)
