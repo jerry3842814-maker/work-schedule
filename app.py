@@ -20,43 +20,48 @@ SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT-utk_RXaKqx5I
 def get_cloud_data():
     try:
         df = pd.read_csv(SHEET_CSV_URL)
-        # 強制轉字串 + 去除空白
         df = df.astype(str).apply(lambda x: x.str.strip())
         return df
     except Exception as e:
         st.error(f"❌ 無法讀取雲端資料: {e}")
         return None
 
-# === 最終強化版「休」班檢查（已針對你的 Unnamed 欄位結構完全最佳化）===
+# === 最終最終版「休」班檢查（已針對你的「年度」+「2026」+ Unnamed 結構完全客製）===
 def check_rest_violations(cloud_df, selected_name, selected_shift, selected_dates):
     if selected_shift != "休" or cloud_df is None or cloud_df.empty:
         return [], None
 
     df_cols = list(cloud_df.columns)
 
-    # ====================== 1. 強力偵測「日期欄位」 ======================
-    date_candidates = {}
-    for col in df_cols:
-        try:
-            parsed = pd.to_datetime(cloud_df[col], errors='coerce')
-            count_date = parsed.notna().sum()
-            if count_date > 5:                     # 至少要有 5 筆以上可解析日期才列入候選
-                date_candidates[col] = count_date
-        except:
-            pass
-    date_col = max(date_candidates, key=date_candidates.get) if date_candidates else None
+    # ====================== 1. 日期欄位（針對「年度」欄位特別處理） ======================
+    date_col = None
+    
+    # 優先使用「年度」欄位（你的雲端就是用這個放日期）
+    if "年度" in df_cols:
+        date_col = "年度"
+    
+    # 如果「年度」不存在，再用內容自動偵測
+    if date_col is None:
+        for col in df_cols:
+            vals = cloud_df[col].dropna().astype(str).str.strip()
+            # 只要有 3 筆以上是 YYYY-MM-DD 格式就認定是日期欄位
+            if vals.str.match(r'^\d{4}-\d{2}-\d{2}$').sum() >= 3:
+                date_col = col
+                break
 
-    # ====================== 2. 強力偵測「班別欄位」 ======================
+    # ====================== 2. 班別欄位（已確認是「2026」） ======================
+    shift_col = None
     shift_keywords = {"早", "晚", "休", "不接組"}
-    shift_candidates = {}
     for col in df_cols:
         vals = cloud_df[col].dropna().astype(str).str.strip()
-        count_shift = vals.isin(shift_keywords).sum()
-        if count_shift > 3:                        # 至少要有 3 筆以上班別才列入候選
-            shift_candidates[col] = count_shift
-    shift_col = max(shift_candidates, key=shift_candidates.get) if shift_candidates else None
+        if vals.isin(shift_keywords).sum() >= 3:
+            shift_col = col
+            break
+    # 額外支援你的欄位名稱「2026」
+    if shift_col is None and "2026" in df_cols:
+        shift_col = "2026"
 
-    # ====================== 3. 姓名欄位（維持原本邏輯） ======================
+    # ====================== 3. 姓名欄位 ======================
     name_col = None
     for possible in ["姓名", "Name", "name", "員工姓名"]:
         if possible in df_cols:
@@ -64,31 +69,29 @@ def check_rest_violations(cloud_df, selected_name, selected_shift, selected_date
             break
     if name_col is None:
         for col in df_cols:
-            if "姓名" in str(col) or str(col).startswith("Unnamed"):
+            if "Unnamed: 2" in str(col) or "姓名" in str(col):
                 name_col = col
                 break
 
     # ====================== 除錯資訊 ======================
     debug_info = {
         "所有欄位": df_cols,
-        "日期欄位": date_col,
-        "日期候選": date_candidates,
-        "班別欄位": shift_col,
-        "班別候選": shift_candidates,
-        "姓名欄位": name_col,
+        "✅ 日期欄位": date_col,
+        "✅ 班別欄位": shift_col,
+        "✅ 姓名欄位": name_col,
         "雲端總筆數": len(cloud_df),
         "休班總筆數": 0,
     }
 
     if date_col is None or shift_col is None:
-        debug_info["錯誤原因"] = "無法自動找到日期或班別欄位（請把下方除錯資訊完整貼給我）"
+        debug_info["錯誤原因"] = "無法找到日期或班別欄位"
         return [], debug_info
 
     # ====================== 篩選休班資料 ======================
     rest_df = cloud_df[cloud_df[shift_col] == "休"].copy()
     debug_info["休班總筆數"] = len(rest_df)
 
-    if rest_df.empty or date_col not in rest_df.columns:
+    if rest_df.empty:
         return [], debug_info
 
     # ====================== 計算每個日期的休班人數 ======================
@@ -102,7 +105,7 @@ def check_rest_violations(cloud_df, selected_name, selected_shift, selected_date
         date_to_count = rest_df.groupby(date_col).size().to_dict()
         date_to_names = {}
 
-    # ====================== 檢查本次登記是否違規 ======================
+    # ====================== 檢查本次登記 ======================
     violating_dates = []
     for d in selected_dates:
         current_count = date_to_count.get(d, 0)
@@ -195,24 +198,23 @@ if st.button("➕ 加入預覽清單", use_container_width=True, type="primary")
         elif selected_shift == "休":
             st.success("✅ 本次登記「休」未超過3人上限")
         
-        # 加入預覽（警示後仍可繼續）
+        # 加入預覽
         st.session_state.submitted = False
         for d in selected_dates:
             st.session_state.records = [r for r in st.session_state.records if r["date"] != d]
             st.session_state.records.append({"date": d, "shift": selected_shift})
         st.success(f"已加入預覽：{len(selected_dates)} 筆 ({selected_shift}班)")
 
-        # 顯示除錯資訊（僅休班時出現）
+        # 顯示除錯資訊
         if selected_shift == "休":
             with st.expander("🔍 休班檢查除錯資訊（點我展開）", expanded=True):
                 st.write("**所有欄位：**", debug_info["所有欄位"])
-                st.write("**✅ 日期欄位：**", debug_info["日期欄位"])
-                st.write("**✅ 班別欄位：**", debug_info["班別欄位"])
-                st.write("**✅ 姓名欄位：**", debug_info["姓名欄位"])
+                st.write("**✅ 日期欄位：**", debug_info["✅ 日期欄位"])
+                st.write("**✅ 班別欄位：**", debug_info["✅ 班別欄位"])
+                st.write("**✅ 姓名欄位：**", debug_info["✅ 姓名欄位"])
                 st.write(f"**雲端總休班筆數：** {debug_info['休班總筆數']}")
                 if debug_info.get("錯誤原因"):
                     st.error(debug_info["錯誤原因"])
-                st.caption("如果還是沒有警示，請把上方所有除錯資訊完整複製貼給我")
 
 st.write("---")
 
