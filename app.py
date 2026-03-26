@@ -26,47 +26,32 @@ def get_cloud_data():
         st.error(f"❌ 無法讀取雲端資料: {e}")
         return None
 
-# === 最終最終版「休」班檢查（已針對你的「年度」+「2026」+ Unnamed 結構完全客製）===
+# === 最終客製版「休」班檢查（已針對你的「年度」+「2026」+ Unnamed 結構 + 日期格式不一致問題完全解決）===
 def check_rest_violations(cloud_df, selected_name, selected_shift, selected_dates):
     if selected_shift != "休" or cloud_df is None or cloud_df.empty:
         return [], None
 
     df_cols = list(cloud_df.columns)
 
-    # ====================== 1. 日期欄位（針對「年度」欄位特別處理） ======================
-    date_col = None
-    
-    # 優先使用「年度」欄位（你的雲端就是用這個放日期）
-    if "年度" in df_cols:
-        date_col = "年度"
-    
-    # 如果「年度」不存在，再用內容自動偵測
+    # 1. 日期欄位（已確認是「年度」）
+    date_col = "年度" if "年度" in df_cols else None
     if date_col is None:
         for col in df_cols:
-            vals = cloud_df[col].dropna().astype(str).str.strip()
-            # 只要有 3 筆以上是 YYYY-MM-DD 格式就認定是日期欄位
-            if vals.str.match(r'^\d{4}-\d{2}-\d{2}$').sum() >= 3:
+            if cloud_df[col].astype(str).str.match(r'^\d{4}-\d{2}-\d{2}').sum() >= 3:
                 date_col = col
                 break
 
-    # ====================== 2. 班別欄位（已確認是「2026」） ======================
-    shift_col = None
-    shift_keywords = {"早", "晚", "休", "不接組"}
-    for col in df_cols:
-        vals = cloud_df[col].dropna().astype(str).str.strip()
-        if vals.isin(shift_keywords).sum() >= 3:
-            shift_col = col
-            break
-    # 額外支援你的欄位名稱「2026」
-    if shift_col is None and "2026" in df_cols:
-        shift_col = "2026"
+    # 2. 班別欄位（已確認是「2026」）
+    shift_col = "2026" if "2026" in df_cols else None
+    if shift_col is None:
+        shift_keywords = {"早", "晚", "休", "不接組"}
+        for col in df_cols:
+            if cloud_df[col].isin(shift_keywords).sum() >= 3:
+                shift_col = col
+                break
 
-    # ====================== 3. 姓名欄位 ======================
-    name_col = None
-    for possible in ["姓名", "Name", "name", "員工姓名"]:
-        if possible in df_cols:
-            name_col = possible
-            break
+    # 3. 姓名欄位（已確認是 Unnamed: 2）
+    name_col = "Unnamed: 2" if "Unnamed: 2" in df_cols else None
     if name_col is None:
         for col in df_cols:
             if "Unnamed: 2" in str(col) or "姓名" in str(col):
@@ -81,6 +66,7 @@ def check_rest_violations(cloud_df, selected_name, selected_shift, selected_date
         "✅ 姓名欄位": name_col,
         "雲端總筆數": len(cloud_df),
         "休班總筆數": 0,
+        "休班日期範例": [],
     }
 
     if date_col is None or shift_col is None:
@@ -94,20 +80,35 @@ def check_rest_violations(cloud_df, selected_name, selected_shift, selected_date
     if rest_df.empty:
         return [], debug_info
 
+    # ====================== 關鍵修正：日期正規化（解決格式不一致問題） ======================
+    rest_df = rest_df.copy()
+    try:
+        # 把「年度」欄位的日期轉成標準 YYYY-MM-DD 格式
+        rest_df['normalized_date'] = pd.to_datetime(
+            rest_df[date_col], errors='coerce'
+        ).dt.strftime('%Y-%m-%d')
+        # 移除無法解析的行
+        rest_df = rest_df[rest_df['normalized_date'].notna()]
+    except:
+        # fallback
+        rest_df['normalized_date'] = rest_df[date_col].astype(str).str.strip()
+
+    debug_info["休班日期範例"] = list(rest_df['normalized_date'].unique()[:8])
+
     # ====================== 計算每個日期的休班人數 ======================
     if name_col and name_col in rest_df.columns:
-        date_to_count = rest_df.groupby(date_col)[name_col].nunique().to_dict()
+        date_to_count = rest_df.groupby('normalized_date')[name_col].nunique().to_dict()
         date_to_names = {
             d: set(group[name_col].astype(str).str.strip())
-            for d, group in rest_df.groupby(date_col)
+            for d, group in rest_df.groupby('normalized_date')
         }
     else:
-        date_to_count = rest_df.groupby(date_col).size().to_dict()
+        date_to_count = rest_df.groupby('normalized_date').size().to_dict()
         date_to_names = {}
 
-    # ====================== 檢查本次登記 ======================
+    # ====================== 檢查本次登記是否超過3人 ======================
     violating_dates = []
-    for d in selected_dates:
+    for d in selected_dates:   # selected_dates 已經是 YYYY-MM-DD
         current_count = date_to_count.get(d, 0)
         already = False
         if name_col and d in date_to_names:
@@ -193,12 +194,13 @@ if st.button("➕ 加入預覽清單", use_container_width=True, type="primary")
                 f"🚨 **休班超過3人上限！**\n\n"
                 f"以下日期登記「休」後將超過3人：\n"
                 f"**{', '.join(violating_dates)}**\n\n"
+                f"（目前雲端已登記人數 + 您本次登記 > 3）\n"
                 f"請調整日期或與主管討論！"
             )
         elif selected_shift == "休":
             st.success("✅ 本次登記「休」未超過3人上限")
         
-        # 加入預覽
+        # 加入預覽（即使有警示仍可繼續登記）
         st.session_state.submitted = False
         for d in selected_dates:
             st.session_state.records = [r for r in st.session_state.records if r["date"] != d]
@@ -213,6 +215,7 @@ if st.button("➕ 加入預覽清單", use_container_width=True, type="primary")
                 st.write("**✅ 班別欄位：**", debug_info["✅ 班別欄位"])
                 st.write("**✅ 姓名欄位：**", debug_info["✅ 姓名欄位"])
                 st.write(f"**雲端總休班筆數：** {debug_info['休班總筆數']}")
+                st.write("**休班日期範例（前8筆）：**", debug_info["休班日期範例"])
                 if debug_info.get("錯誤原因"):
                     st.error(debug_info["錯誤原因"])
 
