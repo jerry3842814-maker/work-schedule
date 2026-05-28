@@ -191,4 +191,158 @@ if selected_shift == "休":
         st.info("✅ 目前沒有日期的「休」達到 3 人。")
 
 selected_dates = st.multiselect(
-    "🗓️ 3. 選擇日期 (選好班別再選日期
+    "🗓️ 3. 選擇日期 (選好班別再選日期)",
+    options=date_options,
+    format_func=lambda d: f"{d}（休已滿）" if selected_shift == "休" and d in full_rest_dates else d,
+    key=f"date_selector_{st.session_state.reset_key}"
+)
+
+# =========================
+# 加入預覽清單
+# =========================
+if st.button("➕ 加入預覽清單", use_container_width=True, type="primary"):
+    if name == "請選擇":
+        st.error("⚠️ 請先選擇姓名")
+    elif not selected_dates:
+        st.warning("⚠️ 請選擇日期")
+    else:
+        simulated_records = build_simulated_records(
+            st.session_state.records,
+            selected_dates,
+            selected_shift
+        )
+
+        if selected_shift == "休":
+            cloud_df = get_rest_data()
+            if cloud_df is None:
+                st.error("❌ 目前無法讀取休班檢查資料，暫時不能登記『休』。")
+            else:
+                violating_dates = check_rest_violations(cloud_df, name, simulated_records)
+                if violating_dates:
+                    st.warning(
+                        f"⚠️ 以下日期登記『休』後將超過 {REST_LIMIT} 人（已達提醒門檻，仍可加入）：\n\n"
+                        f"**{', '.join(violating_dates)}**"
+                    )
+                st.session_state.records = simulated_records
+                st.session_state.submitted = False
+                st.success(f"✅ 已加入預覽：{len(selected_dates)} 筆（休）")
+        else:
+            st.session_state.records = simulated_records
+            st.session_state.submitted = False
+            st.success(f"✅ 已加入預覽：{len(selected_dates)} 筆（{selected_shift}）")
+
+st.write("---")
+
+# =========================
+# 預覽與提交（🌟 已整合方案 A：特定日期刪除功能）
+# =========================
+if st.session_state.records:
+    st.subheader("📍 目前登記預覽")
+    df_preview = pd.DataFrame(st.session_state.records).sort_values("date")
+    st.dataframe(df_preview, use_container_width=True, hide_index=True)
+    
+    # 🌟 方案 A 的核心：特定日期移除下拉選單
+    preview_dates = df_preview["date"].tolist()
+    dates_to_delete = st.multiselect(
+        "🗑️ 選擇要從預覽中移除的日期",
+        options=preview_dates,
+        help="如果某天選錯班別或日期，可以在這裡選擇並單獨移除"
+    )
+    
+    if dates_to_delete:
+        if st.button("❌ 確定刪除所選日期", use_container_width=True):
+            # 過濾掉使用者選取要刪除的日期
+            st.session_state.records = [
+                r for r in st.session_state.records if r["date"] not in dates_to_delete
+            ]
+            st.success(f"🗑️ 已成功將 {len(dates_to_delete)} 筆日期移出預覽！")
+            st.rerun()
+            
+    st.write("") # 留空行作畫面區隔
+   
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🗑️ 清除「全部」預覽", use_container_width=True):
+            st.session_state.records = []
+            st.session_state.reset_key += 1
+            st.session_state.submitted = False
+            st.rerun()
+           
+    with col2:
+        if st.button("🚀 確認提交到雲端", type="primary", use_container_width=True):
+            if name == "請選擇":
+                st.error("❌ 請選擇姓名")
+            else:
+                has_rest = any(r["shift"] == "休" for r in st.session_state.records)
+                if has_rest:
+                    cloud_df = get_rest_data()
+                    if cloud_df is None:
+                        st.error("❌ 目前無法讀取休班檢查資料，暫時不能提交。")
+                    else:
+                        violating_dates = check_rest_violations(
+                            cloud_df, name, st.session_state.records
+                        )
+                        if violating_dates:
+                            st.warning(
+                                f"⚠️ 以下日期登記『休』後將超過 {REST_LIMIT} 人（已達提醒門檻，仍可提交）：\n\n"
+                                f"**{', '.join(violating_dates)}**"
+                            )
+                # 無論是否超過3人都提交
+                with st.spinner("正在提交資料..."):
+                    count = submit_to_google_form(name, st.session_state.records)
+                    if count == len(st.session_state.records):
+                        st.session_state.submitted = True
+                        st.balloons()
+                    elif count > 0:
+                        st.warning(f"⚠️ 僅成功提交 {count} 筆。")
+
+if st.session_state.submitted:
+    st.success("✅ 成功提交！資料已同步至雲端。")
+    if st.button("✨ 點我清空內容", use_container_width=True):
+        st.session_state.records = []
+        st.session_state.reset_key += 1
+        st.session_state.global_reset_key += 1
+        st.session_state.submitted = False
+        st.rerun()
+
+# =========================
+# 雲端總表
+# =========================
+st.write("---")
+st.subheader("📊 雲端預班總表")
+
+if st.button("🔄 查看/重新整理登記表", use_container_width=True):
+    st.cache_data.clear()
+
+all_data = get_total_data()
+if all_data is not None and not all_data.empty:
+    st.dataframe(all_data, use_container_width=True, hide_index=True)
+   
+    # 額外顯示目前哪些日期的休已達上限
+    rest_df = all_data.copy()
+    rest_df = clean_columns(rest_df)
+    if (
+        "請選擇班別或休假" in rest_df.columns and
+        "請選擇日期" in rest_df.columns and
+        "姓名" in rest_df.columns
+    ):
+        rest_df["請選擇班別或休假"] = rest_df["請選擇班別或休假"].apply(normalize_text)
+        rest_df["請選擇日期"] = rest_df["請選擇日期"].apply(normalize_date)
+        rest_df["姓名"] = rest_df["姓名"].apply(normalize_text)
+        only_rest = rest_df[rest_df["請選擇班別或休假"] == "休"].copy()
+        only_rest = only_rest[only_rest["請選擇日期"].notna()]
+        if not only_rest.empty:
+            rest_count = (
+                only_rest.groupby("請選擇日期")["姓名"]
+                .nunique()
+                .sort_index()
+            )
+            full_dates = rest_count[rest_count >= REST_LIMIT]
+            if not full_dates.empty:
+                msg = "、".join([f"{d}（{c}人）" for d, c in full_dates.items()])
+                st.warning(f"⚠️ 以下日期的『休』已達或超過 {REST_LIMIT} 人：{msg}")
+   
+    tw_time = datetime.utcnow() + timedelta(hours=8)
+    st.caption(f"最後更新時間 (UTC+8)：{tw_time.strftime('%Y-%m-%d %H:%M:%S')}")
+else:
+    st.info("目前雲端尚無資料，或尚未發佈到網路。")
